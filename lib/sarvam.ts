@@ -357,8 +357,13 @@ const LANGUAGE_NAMES: Record<SarvamLanguage, string> = {
   'en-IN': 'English',
 };
 
-function getSystemPrompt(mode: StudyMode, language: SarvamLanguage): string {
+function getSystemPrompt(
+  mode: StudyMode,
+  language: SarvamLanguage,
+  targetLanguage?: SarvamLanguage
+): string {
   const lang = LANGUAGE_NAMES[language] || 'Hindi';
+  const targetLang = targetLanguage ? LANGUAGE_NAMES[targetLanguage] || 'English' : 'English';
 
   switch (mode) {
     case 'summarize':
@@ -375,7 +380,7 @@ function getSystemPrompt(mode: StudyMode, language: SarvamLanguage): string {
 Provide the correct answers at the end. Write everything in the same language as the notes (${lang}).`;
 
     case 'translate':
-      return `You are a professional translator. Translate the following text into English. Maintain the original meaning, structure, and any technical terminology. If the text is already in English, respond with "This text is already in English." and reproduce it as-is.`;
+      return `You are a professional translator specializing in Indian languages. Translate the following text into ${targetLang}. Maintain the original meaning, structure, and any technical terminology. Output only the translated text, nothing else. Do not add any commentary or notes.`;
   }
 }
 
@@ -433,9 +438,10 @@ export async function chatCompletion(
 export async function studyAssist(
   text: string,
   mode: StudyMode,
-  language: SarvamLanguage
+  language: SarvamLanguage,
+  targetLanguage?: SarvamLanguage
 ): Promise<string> {
-  const systemPrompt = getSystemPrompt(mode, language);
+  const systemPrompt = getSystemPrompt(mode, language, targetLanguage);
 
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },

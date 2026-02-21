@@ -14,10 +14,11 @@ const VALID_LANGUAGES = new Set<string>([
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { text, mode, language } = body as {
+    const { text, mode, language, targetLanguage } = body as {
       text?: string;
       mode?: string;
       language?: string;
+      targetLanguage?: string;
     };
 
     // ─── Validation ─────────────────────────────────────────────────
@@ -51,7 +52,8 @@ export async function POST(request: NextRequest) {
     const result = await studyAssist(
       trimmedText,
       mode as StudyMode,
-      language as SarvamLanguage
+      language as SarvamLanguage,
+      targetLanguage as SarvamLanguage | undefined
     );
 
     return NextResponse.json({ result });

@@ -19,6 +19,20 @@ interface Tool {
   activeColor: string;
 }
 
+const TRANSLATE_LANGUAGES = [
+  { code: 'en-IN', label: 'English' },
+  { code: 'hi-IN', label: 'Hindi (हिन्दी)' },
+  { code: 'mr-IN', label: 'Marathi (मराठी)' },
+  { code: 'kn-IN', label: 'Kannada (ಕನ್ನಡ)' },
+  { code: 'ta-IN', label: 'Tamil (தமிழ்)' },
+  { code: 'te-IN', label: 'Telugu (తెలుగు)' },
+  { code: 'bn-IN', label: 'Bengali (বাংলা)' },
+  { code: 'gu-IN', label: 'Gujarati (ગુજરાતી)' },
+  { code: 'ml-IN', label: 'Malayalam (മലയാളം)' },
+  { code: 'pa-IN', label: 'Punjabi (ਪੰਜਾਬੀ)' },
+  { code: 'ur-IN', label: 'Urdu (اردو)' },
+] as const;
+
 const TOOLS: Tool[] = [
   {
     mode: 'summarize',
@@ -59,7 +73,7 @@ const TOOLS: Tool[] = [
   {
     mode: 'translate',
     label: 'Translate',
-    description: 'Translate to English',
+    description: 'Translate to any language',
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802" />
@@ -76,11 +90,23 @@ export function StudyTools({ text, language }: Props) {
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [targetLanguage, setTargetLanguage] = useState<string>('en-IN');
+  const [showTranslateOptions, setShowTranslateOptions] = useState(false);
 
   const handleToolClick = async (mode: StudyMode) => {
     // If same tool is clicked again, toggle it off
     if (activeMode === mode && result) {
       setActiveMode(null);
+      setResult('');
+      setError('');
+      setShowTranslateOptions(false);
+      return;
+    }
+
+    // For translate, show language picker first
+    if (mode === 'translate' && !showTranslateOptions) {
+      setActiveMode('translate');
+      setShowTranslateOptions(true);
       setResult('');
       setError('');
       return;
@@ -92,10 +118,15 @@ export function StudyTools({ text, language }: Props) {
     setError('');
 
     try {
+      const payload: Record<string, string> = { text, mode, language };
+      if (mode === 'translate') {
+        payload.targetLanguage = targetLanguage;
+      }
+
       const res = await fetch('/api/study', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, mode, language }),
+        body: JSON.stringify(payload),
       });
 
       const json = await res.json();
@@ -113,6 +144,10 @@ export function StudyTools({ text, language }: Props) {
     }
   };
 
+  const handleTranslateSubmit = () => {
+    handleToolClick('translate');
+  };
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(result);
@@ -121,6 +156,11 @@ export function StudyTools({ text, language }: Props) {
     } catch {
       // ignore
     }
+  };
+
+  const getTargetLangLabel = () => {
+    const found = TRANSLATE_LANGUAGES.find((l) => l.code === targetLanguage);
+    return found ? found.label.split(' (')[0] : 'English';
   };
 
   return (
@@ -157,6 +197,39 @@ export function StudyTools({ text, language }: Props) {
         ))}
       </div>
 
+      {/* Translate language picker */}
+      {showTranslateOptions && !loading && !result && (
+        <div className="flex flex-col gap-3 rounded-lg border border-purple-200 bg-purple-50/50 p-4">
+          <label htmlFor="target-lang" className="text-sm font-medium text-purple-800">
+            Translate to:
+          </label>
+          <div className="flex gap-2">
+            <select
+              id="target-lang"
+              value={targetLanguage}
+              onChange={(e) => setTargetLanguage(e.target.value)}
+              className="flex-1 rounded-lg border border-purple-200 bg-white px-3 py-2 text-sm
+                         shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2
+                         focus:ring-purple-200"
+            >
+              {TRANSLATE_LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleTranslateSubmit}
+              className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold
+                         text-white shadow-sm transition-all hover:bg-purple-700
+                         active:scale-95"
+            >
+              Translate
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Loading state */}
       {loading && (
         <div className="flex items-center gap-3 rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-600">
@@ -168,7 +241,7 @@ export function StudyTools({ text, language }: Props) {
             {activeMode === 'summarize' && 'Generating summary...'}
             {activeMode === 'explain' && 'Preparing explanation...'}
             {activeMode === 'quiz' && 'Creating practice questions...'}
-            {activeMode === 'translate' && 'Translating to English...'}
+            {activeMode === 'translate' && `Translating to ${getTargetLangLabel()}...`}
           </span>
         </div>
       )}
@@ -188,7 +261,7 @@ export function StudyTools({ text, language }: Props) {
               {activeMode === 'summarize' && 'Summary'}
               {activeMode === 'explain' && 'Explanation'}
               {activeMode === 'quiz' && 'Practice Questions'}
-              {activeMode === 'translate' && 'English Translation'}
+              {activeMode === 'translate' && `${getTargetLangLabel()} Translation`}
             </h3>
             <button
               onClick={handleCopy}
