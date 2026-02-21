@@ -84,6 +84,11 @@ const TOOLS: Tool[] = [
   },
 ];
 
+function getLangLabel(code: string): string {
+  const found = TRANSLATE_LANGUAGES.find((l) => l.code === code);
+  return found ? found.label.split(' (')[0] : code;
+}
+
 export function StudyTools({ text, language }: Props) {
   const [activeMode, setActiveMode] = useState<StudyMode | null>(null);
   const [loading, setLoading] = useState(false);
@@ -92,6 +97,17 @@ export function StudyTools({ text, language }: Props) {
   const [copied, setCopied] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState<string>('en-IN');
   const [showTranslateOptions, setShowTranslateOptions] = useState(false);
+
+  // Track the "working" text & language for study tools
+  // After translation, user can switch to the translated text
+  const [usingTranslation, setUsingTranslation] = useState(false);
+  const [translatedText, setTranslatedText] = useState('');
+  const [translatedLangCode, setTranslatedLangCode] = useState('');
+  const [showUseTranslationBanner, setShowUseTranslationBanner] = useState(false);
+
+  // The text and language that study tools (summarize/explain/quiz) will operate on
+  const workingText = usingTranslation ? translatedText : text;
+  const workingLanguage = usingTranslation ? translatedLangCode : language;
 
   const handleToolClick = async (mode: StudyMode) => {
     // If same tool is clicked again, toggle it off
@@ -118,7 +134,11 @@ export function StudyTools({ text, language }: Props) {
     setError('');
 
     try {
-      const payload: Record<string, string> = { text, mode, language };
+      const payload: Record<string, string> = {
+        text: mode === 'translate' ? text : workingText, // translate always uses original
+        mode,
+        language: mode === 'translate' ? language : workingLanguage,
+      };
       if (mode === 'translate') {
         payload.targetLanguage = targetLanguage;
       }
@@ -137,6 +157,13 @@ export function StudyTools({ text, language }: Props) {
       }
 
       setResult(json.result);
+
+      // After a successful translation, offer to use it for other tools
+      if (mode === 'translate') {
+        setTranslatedText(json.result);
+        setTranslatedLangCode(targetLanguage);
+        setShowUseTranslationBanner(true);
+      }
     } catch {
       setError('Network error. Please check your connection and try again.');
     } finally {
@@ -148,6 +175,21 @@ export function StudyTools({ text, language }: Props) {
     handleToolClick('translate');
   };
 
+  const handleUseTranslation = () => {
+    setUsingTranslation(true);
+    setShowUseTranslationBanner(false);
+  };
+
+  const handleSwitchToOriginal = () => {
+    setUsingTranslation(false);
+    setTranslatedText('');
+    setTranslatedLangCode('');
+    // Clear current result so user picks a fresh tool
+    setActiveMode(null);
+    setResult('');
+    setShowTranslateOptions(false);
+  };
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(result);
@@ -156,11 +198,6 @@ export function StudyTools({ text, language }: Props) {
     } catch {
       // ignore
     }
-  };
-
-  const getTargetLangLabel = () => {
-    const found = TRANSLATE_LANGUAGES.find((l) => l.code === targetLanguage);
-    return found ? found.label.split(' (')[0] : 'English';
   };
 
   return (
@@ -174,6 +211,27 @@ export function StudyTools({ text, language }: Props) {
           Use AI to help you learn from your extracted notes
         </p>
       </div>
+
+      {/* Active text indicator */}
+      {usingTranslation && (
+        <div className="flex items-center justify-between rounded-lg border border-indigo-200 bg-indigo-50/50 px-4 py-2.5">
+          <div className="flex items-center gap-2 text-sm text-indigo-700">
+            <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802" />
+            </svg>
+            <span>
+              Using <strong>{getLangLabel(translatedLangCode)}</strong> translation for study tools
+            </span>
+          </div>
+          <button
+            onClick={handleSwitchToOriginal}
+            className="text-sm font-medium text-indigo-600 underline decoration-indigo-300
+                       underline-offset-2 hover:text-indigo-800"
+          >
+            Switch to original
+          </button>
+        </div>
+      )}
 
       {/* Tool buttons grid */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -241,7 +299,7 @@ export function StudyTools({ text, language }: Props) {
             {activeMode === 'summarize' && 'Generating summary...'}
             {activeMode === 'explain' && 'Preparing explanation...'}
             {activeMode === 'quiz' && 'Creating practice questions...'}
-            {activeMode === 'translate' && `Translating to ${getTargetLangLabel()}...`}
+            {activeMode === 'translate' && `Translating to ${getLangLabel(targetLanguage)}...`}
           </span>
         </div>
       )}
@@ -261,7 +319,7 @@ export function StudyTools({ text, language }: Props) {
               {activeMode === 'summarize' && 'Summary'}
               {activeMode === 'explain' && 'Explanation'}
               {activeMode === 'quiz' && 'Practice Questions'}
-              {activeMode === 'translate' && `${getTargetLangLabel()} Translation`}
+              {activeMode === 'translate' && `${getLangLabel(targetLanguage)} Translation`}
             </h3>
             <button
               onClick={handleCopy}
@@ -293,6 +351,33 @@ export function StudyTools({ text, language }: Props) {
             dir="auto"
           >
             {result}
+          </div>
+        </div>
+      )}
+
+      {/* "Use translated text" banner — appears after a successful translation */}
+      {showUseTranslationBanner && !loading && activeMode === 'translate' && result && (
+        <div className="flex flex-col gap-2 rounded-lg border border-green-200 bg-green-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-green-800">
+            Use this {getLangLabel(translatedLangCode)} translation for Summarize, Explain, and Quiz?
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleUseTranslation}
+              className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold
+                         text-white shadow-sm transition-all hover:bg-green-700
+                         active:scale-95"
+            >
+              Use Translation
+            </button>
+            <button
+              onClick={() => setShowUseTranslationBanner(false)}
+              className="rounded-md border border-green-300 bg-white px-3 py-1.5
+                         text-xs font-medium text-green-700 shadow-sm transition-all
+                         hover:bg-green-50 active:scale-95"
+            >
+              Keep Original
+            </button>
           </div>
         </div>
       )}
